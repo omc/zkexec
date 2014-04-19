@@ -1,5 +1,6 @@
 require "zkexec/version"
+require "zkexec/runner"
 
-module Zkexec
+module ZkExec
   # Your code goes here...
 end

@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.version       = Zkexec::VERSION
   spec.authors       = ["Kyle Maxwell"]
   spec.email         = ["kyle@kylemaxwell.com"]
-  spec.summary       = %q{TODO: Write a short summary. Required.}
-  spec.description   = %q{TODO: Write a longer description. Optional.}
+  spec.summary       = %q{Run a process in a wrapper that manages config files from zookeeper}
+  spec.description   = %q{Run a process in a wrapper that manages config files from zookeeper}
   spec.homepage      = ""
   spec.license       = "MIT"
 
@@ -17,6 +17,8 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
+
+  spec.add_runtime_dependency "zk"
 
   spec.add_development_dependency "bundler", "~> 1.5"
   spec.add_development_dependency "rake"
