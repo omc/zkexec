@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+
+prefixes = ARGV.map{ |arg| File.read(arg) }
+
+while line = STDIN.gets
+  puts [prefixes + [line]].join(" ")
+end
