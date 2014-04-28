@@ -8,7 +8,7 @@ module ZkExec
     end
 
     def run(args)
-      options = { :mirrors => [], :quorum => 0, :cluster => "localhost:2181" }
+      options = { :mirrors => [], :cluster => "localhost:2181" }
       opts = OptionParser.new do |opts|
         opts.banner = "Usage: zkexec [options]\n\nRun a command, and restart if the config files change on the remote zookeeper.\n\n"
 
@@ -28,10 +28,10 @@ module ZkExec
           options[:mirrors] << s.split("=")
         end
         
-        opts.on("-q", "--quorum COUNT", "Don't restart unless COUNT servers are healthy") do |s|
-          options[:quorum] = s.to_i
+        opts.on("-l", "--lock NAME", "Name of a zk lockfile, used to enforce rolling restarts") do |s|
+          options[:lock] = s
         end
-        
+                
         opts.on("-a", "--alert COMMAND", "Run this command if the primary command returns","falsey or health checks fail for too long") do |s|
           options[:alert] = s
         end

@@ -1,4 +1,5 @@
 require "zk"
+require "thread"
 
 module ZkExec
   class Executor
@@ -10,19 +11,21 @@ module ZkExec
       @cluster     = options[:cluster]
       @health      = options[:health]
       @mirrors     = options[:mirrors]
-      @quorum      = options[:quorum]
       @alert       = options[:alert]
       @alert_delay = options[:alert_delay]
+      @lock_name   = options[:lock]
       
       log "connecting to #{@cluster}"
       @zk = ZK.new(@cluster, :timeout => 1, :retry_duration => 10)
       raise "timeout connecting to #{@cluster}" unless @zk.connected?
       log "connected"
       
+      @restart_lock = @lock_name && @zk.locker(@lock_name)
+      @local_lock = Mutex.new
+      
       @mirrors.each do |(local, remote)|
         log "registering callback on #{remote}"
         @zk.register(remote) do |event|
-          log "received #{event}"
           if event.changed?
             log "#{remote} changed"
             copy(local, remote)  
@@ -51,26 +54,42 @@ module ZkExec
       raise "node not found in #{e.message}"
     end
     
+    private
+    def with_restart_lock
+      if @restart_lock
+        log "waiting on lock: #{@lock_name}"
+        @restart_lock.lock!
+      end
+      @local_lock.synchronize { yield }
+    ensure
+      if @restart_lock
+        @restart_lock.unlock!
+        log "released lock: #{@lock_name}"
+      end
+    end
+    
     private 
     def kill_to_refork
       if @child
-        @should_refork = true
-        child = @child
-        @child = nil
+        with_restart_lock do
+          @should_refork = true
+          child = @child
+          @child = nil
 
-        log "killing #{child}"
-        Process.kill("TERM", child)
+          log "killing #{child}"
+          Process.kill("TERM", child)
 
-        start_waiting = Time.now
-        while child.running? && Time.now - start_waiting < 30
-          log "waiting on #{child}"
-          sleep 1  
-        end
-        if child.running?
-          log "force killing #{child}"
-          Process.kill("KILL", child) 
-        else
-          log "#{child} terminated"
+          start_waiting = Time.now
+          while child.running? && Time.now - start_waiting < 30
+            log "waiting on #{child}"
+            sleep 1  
+          end
+          if child.running?
+            log "force killing #{child}"
+            Process.kill("KILL", child) 
+          else
+            log "#{child} terminated"
+          end
         end
       end
     end
