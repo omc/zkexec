@@ -8,7 +8,7 @@ module ZkExec
     end
 
     def run(args)
-      options = { :mirrors => [], :cluster => "localhost:2181" }
+      options = { :mirrors => [], :cluster => "localhost:2181", :health_interval => 30, :health_delay => 30 }
       opts = OptionParser.new do |opts|
         opts.banner = "Usage: zkexec [options]\n\nRun a command, and restart if the config files change on the remote zookeeper.\n\n"
 
@@ -24,6 +24,14 @@ module ZkExec
           options[:health] = s
         end
         
+        opts.on("-i", "--health-interval INTERVAL", "Health-check every INTERVAL seconds") do |s|
+          options[:health_interval] = s.to_f
+        end
+        
+        opts.on("-d", "--health-delay INTERVAL", "Wait before starting health checks") do |s|
+          options[:health_delay] = s.to_f
+        end
+        
         opts.on("-m", "--mirror LOCAL_PATH=ZK_PATH", "Mirror a config file from zookeeper to localhost") do |s|
           options[:mirrors] << s.split("=")
         end
@@ -34,10 +42,6 @@ module ZkExec
                 
         opts.on("-a", "--alert COMMAND", "Run this command if the primary command returns","falsey or health checks fail for too long") do |s|
           options[:alert] = s
-        end
-        
-        opts.on("-d", "--alert-delay SECONDS", "How long to wait for health checks to succeed") do |s|
-          options[:alert_delay] = s.to_i
         end
         
         opts.on("-v", "--verbose") do
