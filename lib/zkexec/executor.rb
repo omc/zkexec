@@ -17,11 +17,18 @@ module ZkExec
       @lock_name       = options[:lock]
       
       log "connecting to #{@cluster}"
-      @zk = ZK.new(@cluster, :timeout => 10000, :retry_duration => 10)
+      @zk = ZK.new(@cluster, :thread => :per_callback)
       raise "timeout connecting to #{@cluster}" unless @zk.connected?
       log "connected"
       
-      @restart_lock = @lock_name && @zk.locker(@lock_name)
+      # re-establish watches
+      @on_connected ||= @zk.on_connected do
+        @mirrors.each do |(local, remote)|
+          watch(remote)
+        end
+      end
+      
+      @restart_lock = @lock_name && @zk.exclusive_locker(@lock_name)
       @local_lock = Mutex.new
       
       @mirrors.each do |(local, remote)|
