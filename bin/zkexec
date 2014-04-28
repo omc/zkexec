@@ -4,4 +4,3 @@ require "zkexec"
 
 runner = ZkExec::Runner.new
 runner.run(ARGV)
-runner.join

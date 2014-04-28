@@ -2,11 +2,13 @@ require "optparse"
 
 module ZkExec
   class Runner
+    include ZkExec
+    
     def initialize
     end
 
     def run(args)
-      options = {:mirror => [], :quorum => 0}
+      options = { :mirrors => [], :quorum => 0, :cluster => "localhost:2181" }
       opts = OptionParser.new do |opts|
         opts.banner = "Usage: zkexec [options]\n\nRun a command, and restart if the config files change on the remote zookeeper.\n\n"
 
@@ -14,12 +16,16 @@ module ZkExec
           options[:exec] = s
         end
         
+        opts.on("-c", "--cluster HOST:PORT,...", "Comma-delimited list of zookeeper hosts") do |s|
+          options[:cluster] = s
+        end
+        
         opts.on("-H", "--health COMMAND", "Run this command to health-check") do |s|
           options[:health] = s
         end
         
         opts.on("-m", "--mirror LOCAL_PATH=ZK_PATH", "Mirror a config file from zookeeper to localhost") do |s|
-          options[:mirror] << s.split("=")
+          options[:mirrors] << s.split("=")
         end
         
         opts.on("-q", "--quorum COUNT", "Don't restart unless COUNT servers are healthy") do |s|
@@ -32,6 +38,14 @@ module ZkExec
         
         opts.on("-d", "--alert-delay SECONDS", "How long to wait for health checks to succeed") do |s|
           options[:alert_delay] = s.to_i
+        end
+        
+        opts.on("-v", "--verbose") do
+          options[:verbose] = true
+        end
+
+        opts.on("-s", "--silent") do 
+          options[:silent] = true
         end
         
         opts.on_tail("-h", "--help", "Show this message") do
@@ -47,10 +61,18 @@ module ZkExec
         exit 1
       end
       
-    end
-
-    def join
-      sleep 1<<31
+      silence! if options[:silent]
+      
+      begin
+        Executor.new(options).execute
+      rescue => e
+        if options[:verbose]
+          raise
+        else
+          log(e.message)
+          exit 1
+        end
+      end
     end
   end
 end
