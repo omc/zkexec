@@ -5,7 +5,7 @@ require 'zkexec/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "zkexec"
-  spec.version       = Zkexec::VERSION
+  spec.version       = ZkExec::VERSION
   spec.authors       = ["Kyle Maxwell"]
   spec.email         = ["kyle@kylemaxwell.com"]
   spec.summary       = %q{Run a process in a wrapper that manages config files from zookeeper}

@@ -17,7 +17,7 @@ module ZkExec
       @lock_name       = options[:lock]
       
       log "connecting to #{@cluster}"
-      @zk = ZK.new(@cluster, :timeout => 1, :retry_duration => 10)
+      @zk = ZK.new(@cluster, :timeout => 10000, :retry_duration => 10)
       raise "timeout connecting to #{@cluster}" unless @zk.connected?
       log "connected"
       
@@ -57,15 +57,28 @@ module ZkExec
     
     private
     def with_restart_lock
-      if @restart_lock && !@hold_lock_forever
-        log "waiting on lock: #{@lock_name}"
-        @restart_lock.lock!
+      if @restart_lock
+        begin
+          log "waiting on lock: #{@lock_name}"
+          @restart_lock.lock(:wait => true)
+          log "acquired lock: #{@lock_name}"
+          yield
+        ensure
+          @restart_lock.unlock
+          log "released lock: #{@lock_name}"
+        end
+      else
+        yield
       end
-      @local_lock.synchronize { yield }
-    ensure
-      if @restart_lock && !@hold_lock_forever
-        @restart_lock.unlock!
-        log "released lock: #{@lock_name}"
+    end
+    
+    private 
+    def pid_exists?(pid)
+      begin
+        Process.getpgid(pid)
+        true
+      rescue Errno::ESRCH
+        false
       end
     end
     
@@ -80,36 +93,34 @@ module ZkExec
           @should_refork = true
           child = @child
           @child = nil
-
+          
           log "killing #{child}"
           Process.kill("TERM", child)
-
-          start_waiting = Time.now
-          while child.running? && Time.now - start_waiting < 30
-            log "waiting on #{child}"
-            sleep 1  
-          end
-          if child.running?
-            log "force killing #{child}"
-            Process.kill("KILL", child) 
-          else
-            log "#{child} terminated"
-          end
-          
-          # wait for the other thread to bring the process back
-          health_checks_started = Time.now
-          while Time.now - health_checks_started < @health_delay
-            if system(@health)
-              @hold_lock_forever = false
-              return
-            end
+          checks_started = Time.now
+          while pid_exists?(child) && Time.now - checks_started < 30
             sleep 1
           end
+          if pid_exists?(child)
+            log "force killing #{child}"
+            Process.kill("KILL", child) 
+          end
+
+          log "#{child} terminated"
           
-          # not healthy, hang onto the lock forever, but still be
-          # responsive to config file changes
-          @hold_lock_forever = true
-          alert
+          # This intentionally infinite loops on failure, so that we don't propagate bad config
+          health_checks_started = Time.now
+          loop do
+            log "waiting for health check success"
+            if system(@health)
+              log "health checks succeeding"
+              return
+            end
+            if Time.now - health_checks_started > @health_delay
+              log "health checks failing"
+              alert
+            end
+            sleep @health_interval
+          end
         end
       end
     end
@@ -127,7 +138,10 @@ module ZkExec
           log "health checking via: #{@health}"
           pid = fork { exec(@health) }
           wait pid
-          if $?.exitstatus != 0
+          if $?.exitstatus == 0
+            log "successful health check"
+          else
+            log "failed health check, alerting"
             alert
           end
           sleep @health_interval

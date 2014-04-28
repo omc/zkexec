@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+
+if ARGV.length != 2
+  abort "usage: #{$0} PORT SLEEP"
+end
+
+require "socket"
+
+sleep ARGV[1].to_f
+TCPSocket.new("localhost", ARGV[0].to_i).close
+
