@@ -37,7 +37,7 @@ Let's put the prefix in zookeeper.  We'll throw it in the root, and use the --mi
 
 So, now that we're tracking the config file, lets change it in another console.  Leave the existing terminal running.
 
-    zookeeper/bin/zkCli.sh -cmd set /prefix goodbye
+    :$ zookeeper/bin/zkCli.sh -cmd set /prefix goodbye
 
 Now, flip back to the original terminal and start typing.  You'll note that now the prefix is `goodbye`!
 
@@ -90,4 +90,69 @@ If you aren't running in silent mode, you'll see output like:
 
 ### Adding alerts
 
-TODO: docs
+An alert is simply an executable that gets called when a health check fails unexpectedly.  Alerts won't trigger within `health-delay` seconds of a restart.
+
+Alerts are provided for your convenience.  In most cases, it's better to just add a dead man's switch to your health check.
+
+#### A better alert scheme
+
+Install a dead man's switch via monit via something similar to this sample code:
+
+    :$ mkdir -p /var/run/foo
+    :$ echo "check file succeeded\_at path /var/run/foo/succeeded\_at 
+         if timestamp < 5 minutes then alert" > /etc/monit/conf.d/foo.conf
+    :$ sudo monit reload 
+    :$
+    :$ zkexec \
+         ...
+         --health "./test/libexec/slowcheck 2181 1 && touch /tmp/succeeded_at" 
+
+### Rolling restarts
+
+Use `--lock NAME` to establish a rolling restart group.  When a config file changes, all wrapped processes sharing the lock name and the zookeeper cluster must acquire the lock before killing the child process.  A zkexec only releases the lock when health checks succeed or the zkexec parent process is killed.
+
+Give it a try locally.  In this case, we'll use the slowness of the health check script to our advantage, because we can watch the restart execute serially via the timestamps of the logs.
+
+Run two or more of the following command in separate terminals:
+
+    :$ zkexec \
+         --exec "./test/libexec/prefixed-cat /tmp/prefix" \
+         --lock foo \
+         --health "test/libexec/slowcheck 2181 10" \
+         --mirror /tmp/prefix=/prefix \
+         --health-delay 20 \
+         --health-interval 1
+
+Then, run the following:
+
+    :$ zookeeper/bin/zkCli.sh -cmd set /prefix woot
+
+You can watch the timestamps of the zkexec processes as they log on stdout, noting that they take turns restarting.
+
+#### Config failures in rolling restart
+
+A config failure during a restart is defined as either (1) the restarted process exiting non-zero, or (2) the restarted process failing health checks for `health-delay` seconds.
+
+A config failure pauses the restart.  If this happens, you should push new config, and if it doesn't fail, the restart will pick up where it left off.
+
+### All options
+
+zkexec doesn't use config files.  All options are documented on the command line `--help`:
+
+    :$ zkexec -h
+    Usage: zkexec [options]
+
+    Run a command, and restart if the config files change on the remote zookeeper.
+
+        -e, --exec COMMAND               Run this command
+        -c, --cluster HOST:PORT,...      Comma-delimited list of zookeeper hosts
+        -H, --health COMMAND             Run this command to health-check
+        -i, --health-interval INTERVAL   Health-check every INTERVAL seconds
+        -d, --health-delay INTERVAL      Wait before starting health checks
+        -m, --mirror LOCAL_PATH=ZK_PATH  Mirror a config file from zookeeper to localhost
+        -l, --lock NAME                  Name of a zk lockfile, used to enforce rolling restarts
+        -a, --alert COMMAND              Run this command if the primary command returns
+                                         falsey or health checks fail for too long
+        -v, --verbose
+        -s, --silent
+        -h, --help                       Show this message
