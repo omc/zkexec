@@ -2,6 +2,8 @@
 
 zkexec is a wrapper around an executable that imports configuration from a zookeeper cluster.  When zookeeper configuration changes, zkexec syncs the configuration, then restarts the executable.  zkexec supports rolling restarts, health checks, and alerts.
 
+Warning: this code is not yet being used in production. 
+
 ## Tutorial
 
 ### Ante
